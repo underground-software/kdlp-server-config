@@ -1,0 +1,129 @@
+#!/bin/bash
+
+# config
+
+# package manager
+DNF=yum
+
+# apache package
+APACHE=httpd
+
+# cgit package
+CGIT=cgit
+
+# markdown package
+CGIT=discount
+
+# web root
+WEBROOT=/var/www
+
+# apache conf root
+CONFROOT=/etc/httpd
+
+# apache main conf file
+CONFMAIN="httpd.conf"
+
+# cgit conf file
+CONFCGIT="cgitrc"
+
+# assignments github
+GIT_ASSIGNMENTS="https://github.com/underground-software/KDLP_assignments"
+
+# website github
+GIT_WEBSITE="https://github.com/underground-software/kdlp.underground.software"
+
+# cache list of installed rpms
+RPMS=`rpm -qa`
+
+install_if_missing() {
+	test -z ${1} && return 1
+
+	echo -e "INSTALL\t${1}"
+
+	if ! echo ${RPMS} | grep ${1} > /dev/null; then
+		${DNF} install -y ${1}
+	fi
+
+}
+
+
+# Initial deployment
+kdlp_install() {
+	# Install apache
+	install_if_missing ${APACHE}
+
+	# Install cgit
+	install_if_missing ${CGIT}
+
+	# Install markdown
+	install_if_missing ${MARKDOWN}
+
+	# install configs
+	cp ${CONFMAIN} ${CONFROOT}/conf/${CONFMAIN}
+
+	# install configs
+	cp ${CONFCGIT} ${CONFROOT}/../${CONFCGIT}
+
+	# make sure git repo directory has correct SELinux settings
+	semanage fcontext -a -e /var/lib/git /var/www/git
+	restoreconf -RF /var/www/git
+
+	# install git repos
+	(
+	cd ${WEBROOT}/git 
+	# entries for thse are in cgitrc
+	git clone --bare ${GIT_ASSIGNMENTS}
+	git clone --bare ${GIT_WEBSITE}
+	)
+
+	# deploy the main website
+
+	# add http to the firewall, keep it permanent
+
+	# start httpd, start by default
+}
+
+kdlp_diff() {
+	local any_diffs=""
+
+	CONFMAIN_DIFF=`diff -up ${CONFMAIN} ${CONFROOT}/conf/${CONFMAIN}`
+
+	if [ ! -z ${CONFMAIN_DIFF}]; then
+		echo "Saved and deployed main apache configs diverge:"
+		echo ${CONFMAIN_DIFF}
+		any_diffs=yes
+	fi
+
+	CONFCGIT_DIFF=`diff -up ${CONFCGIT} ${CONFROOT}/../${CONFCGIT}`
+
+	if [ ! -z ${CONFCGIT_DIFF}]; then
+		echo "Saved and deployed cgit configs diverge:"
+		echo ${CONFCGIT_DIFF}
+		any_diffs=yes
+	fi
+
+	if [ -z $any_diffs ]; then
+		echo "Saved and deployed configs in sync"
+	fi
+
+}
+
+usage() {
+	echo "unknown options, consult the source code"
+}
+
+while getopts "d" OPTION; do
+	case ${OPTION} in
+		i)
+			kdlp_install
+			;;
+		d)
+			kdlp_diff
+			;;
+		*)
+			usage
+			exit 1
+			;;
+	esac
+done
+shift $((OPTIND -1))

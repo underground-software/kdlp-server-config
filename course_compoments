@@ -1,0 +1,66 @@
+## Course compomonents
+
+Students need:
+
+- see due dates, assignments, procedures
+	static for course duration
+
+- see course schedule, upcoming/past lectures and recordings
+	static and dynamic, video content hosted on youtube
+	includes lectures notes
+
+- see evaluations, submission status
+	dynamic, changes as instructors grade
+	"dashboard"
+
+- method to submit tasks, assignments, presentations
+
+- method to communicate with instructors
+
+- method to acquire course materials
+	mostly read access to git repos
+
+Instructors need:
+
+- see enrolled/past students, attendence, grades, etc
+
+- see student submission queue
+
+- method to generate, set, and updates schedule, due dates, assignments, policies
+
+- method to broadcast info to students
+	ad-hoc and regularly scheduled communication
+		e.g. assignment reminders, due dates
+
+- method to grade, update student records
+
+- method to append notes and attachments to schedule
+
+- method to communicate with students
+
+- method to deploy/update course content for students
+	mostly read/write access to git repos
+
+Technology:
+
+Email
+- may be fake
+- generate gitconfig, muttconfig
+- security concerns
+- IMAP/POP? SMTP?
+HTTP(S) server
+- apache
+Authentication system
+- probably included in server
+UI
+- info pages
+- git repos
+- email table/dashboard page
+Database
+- of students, assignments, semesters, etc
+Git
+- cgit
+Jitsi + recordings
+Matrix or IRC chat
+CLI tool for API access
+Online email viewer
