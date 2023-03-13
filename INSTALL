@@ -77,10 +77,21 @@ kdlp_install() {
 	)
 
 	# deploy the main website
+	(
+	cd ${WEBROOT}/www
+	git clone ${GIT_WEBSITE}
+	)
+
+	# install markdown generator cgi script
+	cp markdown.sh ${WEBROOT}/cgi-bin
 
 	# add http to the firewall, keep it permanent
+	firewall-cmd --add-sevice=http
+	firewall-cmd --runtime-to-permanent
 
-	# start httpd, start by default
+	# start httpd, and start by default on boot
+	systemctl enable httpd
+	systemctl starthttpd
 }
 
 kdlp_diff() {
@@ -112,7 +123,7 @@ usage() {
 	echo "unknown options, consult the source code"
 }
 
-while getopts "d" OPTION; do
+while getopts "id" OPTION; do
 	case ${OPTION} in
 		i)
 			kdlp_install
