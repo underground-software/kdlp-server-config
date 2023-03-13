@@ -66,7 +66,7 @@ kdlp_install() {
 
 	# make sure git repo directory has correct SELinux settings
 	semanage fcontext -a -e /var/lib/git /var/www/git
-	restoreconf -RF /var/www/git
+	restorecon -RF /var/www/git
 
 	# install git repos
 	(
@@ -80,6 +80,9 @@ kdlp_install() {
 	(
 	cd ${WEBROOT}/www
 	git clone ${GIT_WEBSITE}
+	# v2 branch is the new website
+	cd `basename ${GIT_WEBSITE}`
+	git checkout v2
 	)
 
 	# install markdown generator cgi script
