@@ -86,12 +86,12 @@ kdlp_install() {
 	cp markdown.sh ${WEBROOT}/cgi-bin
 
 	# add http to the firewall, keep it permanent
-	firewall-cmd --add-sevice=http
+	firewall-cmd --add-service=http
 	firewall-cmd --runtime-to-permanent
 
 	# start httpd, and start by default on boot
 	systemctl enable httpd
-	systemctl starthttpd
+	systemctl start httpd
 }
 
 kdlp_diff() {
