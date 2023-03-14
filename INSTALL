@@ -109,9 +109,9 @@ kdlp_install() {
 	echo -e "INSTALL\tmarkdown.sh"
 
 	# add http to the firewall, keep it permanent
-	firewall-cmd --add-service=http
-	firewall-cmd --runtime-to-permanent
-	echo -e "FIREWALL\t allow http"
+	firewall-cmd --add-service=http >/dev/null
+	firewall-cmd --runtime-to-permanent >/dev/null
+	echo -e "FWALL\t allow http"
 
 	# start httpd, and start by default on boot
 	systemctl enable httpd
@@ -127,9 +127,9 @@ kdlp_remove() {
 	fi
 
 	# add remove http from the firewall, keep it permanent
-	firewall-cmd --remove-service=http
-	firewall-cmd --runtime-to-permanent
-	echo -e "FIREWALL\t block http"
+	firewall-cmd --remove-service=http >/dev/null
+	firewall-cmd --runtime-to-permanent >/dev/null
+	echo -e "FWALL\t block http"
 
 	# remove markdown generator cgi script
 	if [ -f ${WEBROOT}/cgi-bin/markdown.sh ]; then
