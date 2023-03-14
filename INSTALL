@@ -12,7 +12,7 @@ APACHE=httpd
 CGIT=cgit
 
 # markdown package
-CGIT=discount
+MARKDOWN=discount
 
 # web root
 WEBROOT=/var/www
@@ -88,10 +88,10 @@ kdlp_install() {
 	# entries for thse are in cgitrc
 
 	git clone --bare ${GIT_ASSIGNMENTS}
-	printf "GITCLONE\t%s\n" `basename ${GIT_ASSIGNMENTS}`
+	printf "GITCLN\t%s\n" `basename ${GIT_ASSIGNMENTS}`
 
 	git clone --bare ${GIT_WEBSITE}
-	printf "GITCLONE\t%s\n" `basename ${GIT_WEBSITE}`
+	printf "GITCLN\t%s\n" `basename ${GIT_WEBSITE}`
 	)
 
 	# deploy the main website
@@ -102,7 +102,7 @@ kdlp_install() {
 	cd `basename ${GIT_WEBSITE}`
 	git checkout v2
 	)
-	printf "GITDEPLOY\t%s v2\n" `basename ${GIT_WEBSITE}`
+	printf "GITDPLY\t%s v2\n" `basename ${GIT_WEBSITE}`
 
 	# install markdown generator cgi script
 	cp markdown.sh ${WEBROOT}/cgi-bin
