@@ -87,11 +87,15 @@ kdlp_install() {
 	cd ${WEBROOT}/git 
 	# entries for thse are in cgitrc
 
+	N=`basename ${GIT_ASSIGNMENTS}`
 	git clone --bare ${GIT_ASSIGNMENTS}
-	printf "GITCLN\t%s\n" `basename ${GIT_ASSIGNMENTS}`
+	cp ${N}.description ${N}.git/description
+	printf "GITCLN\t%s\n" ${N}
 
+	N=`basename ${GIT_WEBSITE}`
 	git clone --bare ${GIT_WEBSITE}
-	printf "GITCLN\t%s\n" `basename ${GIT_WEBSITE}`
+	cp ${N}.description ${N}.git/description
+	printf "GITCLN\t%s\n" ${N}
 	)
 
 	# deploy the main website
@@ -123,13 +127,13 @@ kdlp_remove() {
 	# stop httpd, and start by default on boot
 	if systemctl --no-pager status httpd; then
 		systemctl stop httpd
-		echo -e "SERVICE\t stop httpd"
+		echo -e "SERVICE\tstop httpd"
 	fi
 
 	# add remove http from the firewall, keep it permanent
 	firewall-cmd --remove-service=http >/dev/null
 	firewall-cmd --runtime-to-permanent >/dev/null
-	echo -e "FWALL\t block http"
+	echo -e "FWALL\tblock http"
 
 	# remove markdown generator cgi script
 	if [ -f ${WEBROOT}/cgi-bin/markdown.sh ]; then
