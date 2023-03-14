@@ -132,13 +132,17 @@ kdlp_remove() {
 	echo -e "FIREWALL\t block http"
 
 	# remove markdown generator cgi script
-	rm ${WEBROOT}/cgi-bin/markdown.sh
+	if [ -f ${WEBROOT}/cgi-bin/markdown.sh ]; then
+		rm ${WEBROOT}/cgi-bin/markdown.sh
+	fi
 	echo -e "REMOVE\tmarkdown.sh"
 
 	# remove the main website
 	(
 	cd ${WEBROOT}/html
-	rm `basename ${GIT_WEBSITE}`
+	if [ -f `basename ${GIT_WEBSITE} ]; then
+		rm -rf `basename ${GIT_WEBSITE}`
+	fi
 	echo
 	)
 	printf "REMOVE\t%s\n" `basename ${GIT_WEBSITE}`
