@@ -43,9 +43,17 @@ install_if_missing() {
 	if ! echo ${RPMS} | grep ${1} > /dev/null; then
 		${DNF} install -y ${1}
 	fi
-
 }
 
+remove_if_installed() {
+	test -z ${1} && return 1
+
+	echo -e "REMOVE\t${1}"
+
+	if echo ${RPMS} | grep ${1} > /dev/null; then
+		${DNF} remove -y ${1}
+	fi
+}
 
 # Initial deployment
 kdlp_install() {
@@ -60,41 +68,93 @@ kdlp_install() {
 
 	# install configs
 	cp ${CONFMAIN} ${CONFROOT}/conf/${CONFMAIN}
+	echo -e "COPY\t${CONFMAIN}"
 
 	# install configs
 	cp ${CONFCGIT} ${CONFROOT}/../${CONFCGIT}
+	echo -e "COPY\t${CONFCGIT}"
 
 	# make sure git repo directory has correct SELinux settings
 	semanage fcontext -a -e /var/lib/git /var/www/git
 	restorecon -RF /var/www/git
+	echo -e "SELINUX\ttweak"
 
 	# install git repos
 	(
 	cd ${WEBROOT}/git 
 	# entries for thse are in cgitrc
+
 	git clone --bare ${GIT_ASSIGNMENTS}
+	printf "GITCLONE\t%s\n" `basename ${GIT_ASSIGNMENTS}`
+
 	git clone --bare ${GIT_WEBSITE}
+	printf "GITCLONE\t%s\n" `basename ${GIT_WEBSITE}`
 	)
 
 	# deploy the main website
 	(
-	cd ${WEBROOT}/www
+	cd ${WEBROOT}/html
 	git clone ${GIT_WEBSITE}
 	# v2 branch is the new website
 	cd `basename ${GIT_WEBSITE}`
 	git checkout v2
 	)
+	printf "GITDEPLOY\t%s v2\n" `basename ${GIT_WEBSITE}`
 
 	# install markdown generator cgi script
 	cp markdown.sh ${WEBROOT}/cgi-bin
+	echo -e "INSTALL\tmarkdown.sh"
 
 	# add http to the firewall, keep it permanent
 	firewall-cmd --add-service=http
 	firewall-cmd --runtime-to-permanent
+	echo -e "FIREWALL\t allow http"
 
 	# start httpd, and start by default on boot
 	systemctl enable httpd
 	systemctl start httpd
+	echo -e "SERVICE\t start httpd"
+}
+
+kdlp_remove() {
+	# stop httpd, and start by default on boot
+	if systemctl status httpd; then
+		systemctl stop httpd
+		echo -e "SERVICE\t stop httpd"
+	fi
+
+	# add remove http from the firewall, keep it permanent
+	firewall-cmd --remove-service=http
+	firewall-cmd --runtime-to-permanent
+	echo -e "FIREWALL\t block http"
+
+	# remove markdown generator cgi script
+	rm ${WEBROOT}/cgi-bin/markdown.sh
+	echo -e "REMOVE\tmarkdown.sh"
+
+	# remove the main website
+	(
+	cd ${WEBROOT}/html
+	rm `basename ${GIT_WEBSITE}`
+	echo
+	)
+	printf "REMOVE\t%s\n" `basename ${GIT_WEBSITE}`
+
+	# remove git repos
+	rm -rf ${WEBROOT}/git 
+	printf "REMOVE\t%s\n" "git repos"
+
+	# don't bother reverting the SELinux stuff
+	# and no purpose removing the config files
+
+	# remove markdown
+	remove_if_installed ${MARKDOWN}
+
+	# remove cgit
+	remove_if_installed ${CGIT}
+
+	# remove apache
+	remove_if_installed ${APACHE}
 }
 
 kdlp_diff() {
@@ -126,10 +186,13 @@ usage() {
 	echo "unknown options, consult the source code"
 }
 
-while getopts "id" OPTION; do
+while getopts "ird" OPTION; do
 	case ${OPTION} in
 		i)
 			kdlp_install
+			;;
+		r)
+			kdlp_remove
 			;;
 		d)
 			kdlp_diff
