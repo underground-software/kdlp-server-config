@@ -84,17 +84,18 @@ kdlp_install() {
 
 	# install git repos
 	(
+	
 	cd ${WEBROOT}/git 
 	# entries for thse are in cgitrc
 
 	N=`basename ${GIT_ASSIGNMENTS}`
 	git clone --bare ${GIT_ASSIGNMENTS}
-	cp ${N}.description ${N}.git/description
+	cp ${SCRIPTWD}/${N}.description ${N}.git/description
 	printf "GITCLN\t%s\n" ${N}
 
 	N=`basename ${GIT_WEBSITE}`
 	git clone --bare ${GIT_WEBSITE}
-	cp ${N}.description ${N}.git/description
+	cp ${SCRIPTWD}/${N}.description ${N}.git/description
 	printf "GITCLN\t%s\n" ${N}
 	)
 
@@ -196,6 +197,11 @@ kdlp_diff() {
 usage() {
 	echo "unknown options, consult the source code"
 }
+
+if [ ! -f kdlp-server-config-root ]; then
+	echo "Please run `basename $0` with the repo as working directory."
+fi
+SCRIPTWD=`pwd`
 
 while getopts "ird" OPTION; do
 	case ${OPTION} in
