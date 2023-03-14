@@ -3,7 +3,7 @@
 # config
 
 # package manager
-DNF=yum
+DNF="yum -q"
 
 # apache package
 APACHE=httpd
