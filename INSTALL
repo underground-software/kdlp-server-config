@@ -75,7 +75,9 @@ kdlp_install() {
 	echo -e "COPY\t${CONFCGIT}"
 
 	# create git directory
-	mkdir /var/www/git
+	if [ ! -d /var/www/git ]; then
+		mkdir /var/www/git
+	fi
 
 	# make sure git repo directory has correct SELinux settings
 	semanage fcontext -a -e /var/lib/git /var/www/git
@@ -200,6 +202,7 @@ usage() {
 
 if [ ! -f kdlp-server-config-root ]; then
 	echo "Please run `basename $0` with the repo as working directory."
+	exit 1
 fi
 SCRIPTWD=`pwd`
 
