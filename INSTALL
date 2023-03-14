@@ -144,7 +144,7 @@ kdlp_remove() {
 	# remove the main website
 	(
 	cd ${WEBROOT}/html
-	if [ -f `basename ${GIT_WEBSITE}` ]; then
+	if [ -d `basename ${GIT_WEBSITE}` ]; then
 		rm -rf `basename ${GIT_WEBSITE}`
 	fi
 	echo
