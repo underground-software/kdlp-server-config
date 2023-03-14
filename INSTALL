@@ -41,7 +41,7 @@ install_if_missing() {
 	echo -e "INSTALL\t${1}"
 
 	if ! echo ${RPMS} | grep ${1} > /dev/null; then
-		${DNF} install -y ${1}
+		${DNF} install -y ${1} > /dev/null
 	fi
 }
 
@@ -51,7 +51,7 @@ remove_if_installed() {
 	echo -e "REMOVE\t${1}"
 
 	if echo ${RPMS} | grep ${1} > /dev/null; then
-		${DNF} remove -y ${1}
+		${DNF} remove -y ${1} > /dev/null
 	fi
 }
 
@@ -121,7 +121,7 @@ kdlp_install() {
 
 kdlp_remove() {
 	# stop httpd, and start by default on boot
-	if systemctl status httpd; then
+	if systemctl --no-pager status httpd; then
 		systemctl stop httpd
 		echo -e "SERVICE\t stop httpd"
 	fi
