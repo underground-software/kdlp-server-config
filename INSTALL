@@ -74,6 +74,9 @@ kdlp_install() {
 	cp ${CONFCGIT} ${CONFROOT}/../${CONFCGIT}
 	echo -e "COPY\t${CONFCGIT}"
 
+	# create git directory
+	mkdir /var/www/git
+
 	# make sure git repo directory has correct SELinux settings
 	semanage fcontext -a -e /var/lib/git /var/www/git
 	restorecon -RF /var/www/git
