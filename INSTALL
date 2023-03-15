@@ -173,17 +173,17 @@ kdlp_diff() {
 
 	CONFMAIN_DIFF=`diff -up ${CONFMAIN} ${CONFROOT}/conf/${CONFMAIN}`
 
-	if [ ! -z ${CONFMAIN_DIFF}]; then
+	if [ ! -z "${CONFMAIN_DIFF}" ]; then
 		echo "Saved and deployed main apache configs diverge:"
-		echo ${CONFMAIN_DIFF}
+		echo -e "${CONFMAIN_DIFF}"
 		any_diffs=yes
 	fi
 
 	CONFCGIT_DIFF=`diff -up ${CONFCGIT} ${CONFROOT}/../${CONFCGIT}`
 
-	if [ ! -z ${CONFCGIT_DIFF}]; then
+	if [ ! -z "${CONFCGIT_DIFF}" ]; then
 		echo "Saved and deployed cgit configs diverge:"
-		echo ${CONFCGIT_DIFF}
+		echo -e "${CONFCGIT_DIFF}"
 		any_diffs=yes
 	fi
 
