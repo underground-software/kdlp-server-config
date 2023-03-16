@@ -1,0 +1,37 @@
+*** Starting uWSGI 2.0.21 (64bit) on [Wed Mar 15 16:02:14 2023] ***
+compiled with version: 4.8.5 20150623 (Red Hat 4.8.5-44) on 15 March 2023 18:51:12
+os: Linux-3.10.0-1160.88.1.el7.x86_64 #1 SMP Tue Mar 7 15:41:52 UTC 2023
+nodename: prod-01.kdlp.underground.software
+machine: x86_64
+clock source: unix
+detected number of CPU cores: 1
+current working directory: /root/kdlp-server-config/auth.py
+detected binary path: /usr/local/bin/uwsgi
+!!! no internal routing support, rebuild with pcre support !!!
+uWSGI running as root, you can use --uid/--gid/--chroot options
+*** WARNING: you are running uWSGI as root !!! (use the --uid flag) *** 
+*** WARNING: you are running uWSGI without its master process manager ***
+your processes number limit is 31837
+your memory page size is 4096 bytes
+detected max file descriptor number: 1024
+lock engine: pthread robust mutexes
+thunder lock: disabled (you can enable it with --thunder-lock)
+uWSGI http bound on :9090 fd 4
+spawned uWSGI http 1 (pid: 27514)
+uwsgi socket 0 bound to TCP address 127.0.0.1:44865 (port auto-assigned) fd 3
+uWSGI running as root, you can use --uid/--gid/--chroot options
+*** WARNING: you are running uWSGI as root !!! (use the --uid flag) *** 
+Python version: 3.6.8 (default, Nov 16 2020, 16:55:22)  [GCC 4.8.5 20150623 (Red Hat 4.8.5-44)]
+*** Python threads support is disabled. You can enable it with --enable-threads ***
+Python main interpreter initialized at 0x10a10b0
+uWSGI running as root, you can use --uid/--gid/--chroot options
+*** WARNING: you are running uWSGI as root !!! (use the --uid flag) *** 
+your server socket listen backlog is limited to 100 connections
+your mercy for graceful operations on workers is 60 seconds
+mapped 72904 bytes (71 KB) for 1 cores
+*** Operational MODE: single process ***
+WSGI app 0 (mountpoint='') ready in 0 seconds on interpreter 0x10a10b0 pid: 27513 (default app)
+uWSGI running as root, you can use --uid/--gid/--chroot options
+*** WARNING: you are running uWSGI as root !!! (use the --uid flag) *** 
+*** uWSGI is running in multiple interpreter mode ***
+spawned uWSGI worker 1 (and the only) (pid: 27513, cores: 1)

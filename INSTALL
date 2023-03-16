@@ -14,6 +14,14 @@ CGIT=cgit
 # markdown package
 MARKDOWN=discount
 
+# nginx package
+NGINX=discount
+
+# rustc package
+RUSTC="rustc"
+
+PYTHON_DEVEL="python3-devel"
+
 # web root
 WEBROOT=/var/www
 
@@ -54,14 +62,40 @@ remove_if_installed() {
 
 # Initial deployment
 kdlp_install() {
-	# Install apache
+	# Install apache as the main server
 	install_if_missing ${APACHE}
 
-	# Install cgit
+	# Install cgit to serve html for git server
 	install_if_missing ${CGIT}
 
-	# Install markdown
+	# Install markdown to render md as html
 	install_if_missing ${MARKDOWN}
+
+	# Install nginx to proxy incoming requests to main and other servers
+	install_if_missing ${NGINX}
+
+	# Install uwsgi and python-devel for auth server
+	install_if_missing ${PYTHON_DEVEL}
+	pip install wusgi
+
+	# needed for this
+	setsebool -P httpd_can_network_connect 1
+
+
+	# Install snap for certbot
+	install_if_missing snapd
+	systemctl enable --now snapd
+	snap install core;
+	snap refresh core 
+	# enable classic snap support
+	ln -s /var/lib/snapd/snap /snap
+	snap install --classic certbot
+
+	# run certbot
+	certbot --nginx
+
+	# proxy http(s) traffic to internal apache server
+	sed -i -e '0,/ssl_dhparam \/etc\/letsencrypt\/ssl-dhparams.pem; # managed by Certbot/s//&\n\n    location ~\/.* {\n        proxy_pass http:\/\/localhost:8080;\n    }\n/' /etc/nginx/sites-enabled/0-letsencrypt.conf
 
 	# install configs
 	cp ${CONFMAIN} ${CONFROOT}/conf/${CONFMAIN}
@@ -71,6 +105,7 @@ kdlp_install() {
 	cp ${CONFCGIT} ${CONFROOT}/../${CONFCGIT}
 	echo -e "COPY\t${CONFCGIT}"
 
+
 	# create git directory
 	if [ ! -d /var/www/git ]; then
 		mkdir /var/www/git
@@ -79,7 +114,11 @@ kdlp_install() {
 	# make sure git repo directory has correct SELinux settings
 	semanage fcontext -a -e /var/lib/git /var/www/git
 	restorecon -RF /var/www/git
-	echo -e "SELINUX\ttweak"
+	echo -e "SELINUX\tgit tweak"
+
+	# allow apache to relay network traffic internally (to allow nginx to work)
+	setsebool -P httpd_can_network_relay 1  
+	echo -e "SELINUX\tapache tweak"
 
 	# install git repos
 	(
@@ -158,14 +197,17 @@ kdlp_remove() {
 	# don't bother reverting the SELinux stuff
 	# and no purpose removing the config files
 
+	# remove nginx
+	remove_if_installed ${NGINX}
+
 	# remove markdown
 	remove_if_installed ${MARKDOWN}
 
 	# remove cgit
 	remove_if_installed ${CGIT}
 
-	# remove apache
-	remove_if_installed ${APACHE}
+	# remove apache and possibly subpackages
+	remove_if_installed ${APACHE}*
 }
 
 kdlp_diff() {
