@@ -224,7 +224,7 @@ def get_session_by_username(session_username):
 
 # return none if token is expired and also purge old entry
 def get_session_by_token(session_token):
-	US = do_sessions_comm(SESSION_GET_TOKEN, mkUS(session=session_token))
+	US = do_sessions_comm(SESSION_GET_TOKEN, mkUS(token=session_token))
 	if US is None:
 		return None	
 
@@ -251,7 +251,7 @@ def ok_urlencoded(content, SR):
 	SR('200 OK', [('Content-Type', 'application/x-www-form-urlencoded')])
 	return [bytes8(content)]
 
-def unauth_urlencoed(content, SR):
+def unauth_urlencoded(content, SR):
 	SR('401 Unauthorized', [('Content-Type', \
 		'application/x-www-form-urlencoded')])
 	return [bytes8(content)]
@@ -390,7 +390,7 @@ def handle_login(env, SR, logout=False):
 
 	printd('handle_login: logout=%d' % logout)
 
-	if US is not None:
+	if US:
 		username = US_user(US)
 		# check if user requests logout
 		if logout:
