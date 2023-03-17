@@ -3,6 +3,8 @@ from html import escape
 from http import cookies
 import sys, datetime, bcrypt, sqlite3, hashlib, random
 
+# FYI: define SR to mean start response
+
 VERSION="0.1"
 
 FORM_LOGIN="""
@@ -203,62 +205,62 @@ def get_session_by_token(session_token):
 	return session
 
 	
-def ok_html_docs_headers(document, extra_docs, extra_headers, start_response):
-	start_response('200 OK', [('Content-Type', 'text/html')] + extra_headers)
+def ok_html_docs_headers(document, extra_docs, extra_headers, SR):
+	SR('200 OK', [('Content-Type', 'text/html')] + extra_headers)
 	return [bytes8(document)] + [bytes8(d) for d in extra_docs]
 
-def ok_text(text, start_response):
-	start_response('200 OK', [('Content-Type', 'text/plain')])
+def ok_text(text, SR):
+	SR('200 OK', [('Content-Type', 'text/plain')])
 	return [bytes8(text)]
 
 
-def ok_urlencoded(content, start_response):
-	start_response('200 OK', [('Content-Type', 'application/x-www-form-urlencoded')])
+def ok_urlencoded(content, SR):
+	SR('200 OK', [('Content-Type', 'application/x-www-form-urlencoded')])
 	return [bytes8(content)]
 
-def unauth_urlencoed(content, start_response):
-	start_response('401 Unauthorized', [('Content-Type', \
+def unauth_urlencoed(content, SR):
+	SR('401 Unauthorized', [('Content-Type', \
 		'application/x-www-form-urlencoded')])
 	return [bytes8(content)]
 
-def notfound_urlencoded(content, start_response):
-	start_response('404 Not Found', [('Content-Type', \
+def notfound_urlencoded(content, SR):
+	SR('404 Not Found', [('Content-Type', \
 		'application/x-www-form-urlencoded')])
 	return [bytes8(content)]
 	
-def _handle_check(token, start_response):
+def _handle_check(token, SR):
 	session = get_session_by_token(token)
 
 	# If we have an unexpired session, the bearer
 	# of the token is authenticated as session[1]
 	if session is not None:
-		return ok_urlencoded('auth=%s' % session[1], start_response)
+		return ok_urlencoded('auth=%s' % session[1], SR)
 	else:
-		return unauth_urlencoded('auth=nil', start_response)
+		return unauth_urlencoded('auth=nil', SR)
 
-def handle_check(queries, start_response):
+def handle_check(queries, SR):
 	token = queries.get('token',[''])[0]
 	if len(token) > 0:
-		return _handle_check(token, start_response)
+		return _handle_check(token, SR)
 	else:
-		return ok_urlencoded('error="No token= supplied in URL. Nothing done."', start_response)
+		return ok_urlencoded('error="No token= supplied in URL. Nothing done."', SR)
 
-def _handle_logout(username, start_response):
+def _handle_logout(username, SR):
 	session = get_session_by_username(username)
 
 	# see comment in handle_check()
 	if session is not None:
 		drop_session_by_username(username)
-		return ok_urlencoded('logout=%s' % username, start_response)
+		return ok_urlencoded('logout=%s' % username, SR)
 	else:
-		return notfound_urlencoded('logout=nil', start_response)
+		return notfound_urlencoded('logout=nil', SR)
 
-def handle_logout(queries, start_response):
+def handle_logout(queries, SR):
 	username = queries.get('username',[''])[0]
 	if len(username) > 0:
-		return _handle_logout(username, start_response)
+		return _handle_logout(username, SR)
 	else:
-		return ok_urlencoded('error="No username= suplied in URL. Nothing done."', start_response)
+		return ok_urlencoded('error="No username= suplied in URL. Nothing done."', SR)
 
 def get_req_body_size(env):
 	try:
@@ -328,7 +330,7 @@ def get_session_from_cookie(env):
 
 	return user_session	
 
-def generate_page_login(form, start_response, extra_headers, msg):
+def generate_page_login(form, SR, extra_headers, msg):
 	base=''
 
 	with open(KDLP_URLBASE + 'header', "r") as f:
@@ -347,9 +349,9 @@ def generate_page_login(form, start_response, extra_headers, msg):
 	extra = [dump_line(), dump_as_str("message", msg),
 		dump_as_str("auth.py", VERSION), dump_line()]
 
-	return ok_html_docs_headers(base, extra, extra_headers, start_response)
+	return ok_html_docs_headers(base, extra, extra_headers, SR)
 		
-def handle_login(env, start_response):
+def handle_login(env, SR):
 	msg='welcome, please login'
 
 	# check if user $TOKEN valid and authenticate as $USERNAME
@@ -392,10 +394,10 @@ def handle_login(env, start_response):
 			'remaining' : str(expiry_dt - datetime.datetime.utcnow())
 		}
 
-	return generate_page_login(main_form, start_response, extra_headers, msg)
+	return generate_page_login(main_form, SR, extra_headers, msg)
 
 
-def application(env, start_response):
+def application(env, SR):
 
 	path_info = env.get("PATH_INFO", "")
 	query_string = env.get("QUERY_STRING", "")
@@ -405,10 +407,10 @@ def application(env, start_response):
 		% (str(path_info), str(queries)))
 
 	if path_info == "/login":
-		return handle_login(env, start_response)
+		return handle_login(env, SR)
 	elif path_info == "/check":
-		return handle_check(queries, start_response)
+		return handle_check(queries, SR)
 	elif path_info == "/logout":
-		return handle_logout(queries, start_response)
+		return handle_logout(queries, SR)
 	else:
-		return notfound_urlencoded('error="Page not found."', start_response)
+		return notfound_urlencoded('error="Page not found."', SR)
