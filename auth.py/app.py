@@ -273,17 +273,13 @@ def is_post_req(env):
 
 
 def get_pwdhash_by_user(username):
-	db = sqlite3.connect(KDLP_USERS_DB)
-	db_cur = db.cursor()
+	comm="select pwdhash from users where username = \"%s\";" % username
 
-	res = db_cur.execute("select pwdhash from users where username = \"%s\";" % username)
+	result=do_sqlite3_comm(KDLP_USERS_DB, comm, fetch=True)
+	if result is not None:
+		result = result[0]
 
-	res_content = res.fetchone()
-	if res_content is not None:
-		res_content = res_content[0]
-	db.close()
-
-	return res_content
+	return result
 
 CREDS_OK	=0
 CREDS_CONFLICT	=1
