@@ -4,6 +4,7 @@ from http import cookies
 import sys, datetime, bcrypt, sqlite3, hashlib, random
 
 # FYI: define SR to mean start response
+# FYI: define US to mean user session
 
 VERSION="0.1"
 
@@ -79,6 +80,27 @@ def set_cookie_header(name, value, days=0, minutes=15):
     secs = 60 * 15
     return ('Set-Cookie', '{}={}; Expires={}; Max-Age={}; Path=/'.format(name, value, fdt, secs))
 
+# US (user session data) structure (token, user, expiry)
+def US_token(US):
+	return US[0]
+
+def US_user(US):
+	return US[1]
+
+def US_expiry(US):
+	return US[2]
+
+def US_expired(US):
+	if US_expiry(US) is None:
+		return None
+	if datetime.datetime.utcnow().timestamp() > US_expiry(US):
+		printd('US expired')
+	else:
+		printd('US unexpired')
+	return datetime.datetime.utcnow().timestamp() > US_expiry(US)
+
+def mkUS(token=None, user=None, expiry=None):
+	return (token, user, expiry) 
 
 def printd(string):
 	return print(string, file=sys.stderr)
@@ -144,19 +166,20 @@ SESSION_DROP_USER_COMM = "DELETE FROM sessions WHERE user = \"%s\";"
 def _do_sessions_comm(comm, commit=False, fetch=False):
 	return do_sqlite3_comm(KDLP_SESSIONS_DB, comm, commit=commit, fetch=fetch)
 
-def do_sessions_comm(comm, data=None):
+def do_sessions_comm(comm, US=None):
 	if   comm == SESSION_NEW:
-		return _do_sessions_comm(SESSION_NEW_COMM % data, commit=True)
+		return _do_sessions_comm(SESSION_NEW_COMM % US, commit=True)
 	elif comm == SESSION_GET_TOKEN:
-		return _do_sessions_comm(SESSION_GET_TOKEN_COMM % (data[0]), fetch=True)
+		return _do_sessions_comm(SESSION_GET_TOKEN_COMM % (US_token(US)), fetch=True)
 	elif comm == SESSION_GET_USER:
-		return _do_sessions_comm(SESSION_GET_USER_COMM % (data[1]), fetch=True)
+		return _do_sessions_comm(SESSION_GET_USER_COMM % (US_user(US)), fetch=True)
 	elif comm == SESSION_DROP_TOKEN:
-		return _do_sessions_comm(SESSION_DROP_TOKEN_COMM % (data[0]), commit=True)
+		return _do_sessions_comm(SESSION_DROP_TOKEN_COMM % (US_token(US)), commit=True)
 	elif comm == SESSION_DROP_USER:
-		return _do_sessions_comm(SESSION_DROP_USER_COMM % (data[1]), commit=True)
+		return _do_sessions_comm(SESSION_DROP_USER_COMM % (US_user(US)), commit=True)
 	else:
 		printd("unknown sessions comm type")
+		return None	
 
 def new_session_by_username(session_username):
 	
@@ -171,49 +194,48 @@ def new_session_by_username(session_username):
 	# sessions expire in 15 minutes for now
 	session_expiry = (datetime.datetime.utcnow() + datetime.timedelta(minutes=15)).timestamp()
 
-	do_sessions_comm(SESSION_NEW, (session_token, session_username, session_expiry))
+	do_sessions_comm(SESSION_NEW, mkUS(token=session_token, \
+		user=session_username, expiry=session_expiry))
 
 	return get_session_by_username(session_username)
 
 def drop_session_by_username(session_username):
-	do_sessions_comm(SESSION_DROP_USER, (None, session_username, None))
+	do_sessions_comm(SESSION_DROP_USER, mkUS(user=session_username))
 	return
 
 def drop_session_by_token(session_token):
-	do_sessions_comm(SESSION_DROP_TOKEN, (session_token, None, None))
+	do_sessions_comm(SESSION_DROP_TOKEN, mkUS(token=session_token))
 	return
 
 def get_session_by_username(session_username):
-	session = do_sessions_comm(SESSION_GET_USER, (None, session_username, None))
-	if session is None:
+	US = do_sessions_comm(SESSION_GET_USER, mkUS(user=session_username))
+	if US is None:
 		return None	
 
-	session_expiry = session[2]
-	
 	# if the current timestamp is greater than session expiry,
 	# purge the old session from the databse and return none 
 	# by re-trying the request
-	if datetime.datetime.utcnow().timestamp() > session_expiry:
+	if US_expired(US):
+		printd('drop by username %s' % session_username)
 		drop_session_by_username(session_username)
 		return get_session_by_username(session_username)
 
-	return session
+	return US
 
 # return none if token is expired and also purge old entry
 def get_session_by_token(session_token):
-	session = do_sessions_comm(SESSION_GET_TOKEN,(session_token, None, None))
-	if session is None:
+	US = do_sessions_comm(SESSION_GET_TOKEN, mkUS(session=session_token))
+	if US is None:
 		return None	
-
-	session_expiry = session[2]
 
 	# if the current timestamp is greater than session expiry,
 	# purge the old session from the databse and return none 
 	# by re-trying the request
-	if datetime.datetime.utcnow().timestamp() > session_expiry:
+	if US_expired(US):
+		printd('drop by token %s' % session_token)
 		drop_session_by_token(session_token)
 		return get_session_by_token(session_token)
-	return session
+	return US
 
 	
 def ok_html_docs_headers(document, extra_docs, extra_headers, SR):
@@ -316,17 +338,17 @@ def login_creds_from_body(env):
 		if pwdhash is not None and bcrypt.checkpw(bytes8(password), bytes8(pwdhash)):
 			# if the password is valid,
 			# try to start a new session right away
-			session = new_session_by_username(username)
+			US  = new_session_by_username(username)
 			# session for $username already exists if we still get None
-			status = CREDS_CONFLICT if session is None else CREDS_OK
+			status = CREDS_CONFLICT if US is None else CREDS_OK
 
 	if status == CREDS_CONFLICT:
-		session = ('',username,'')
+		US = mkUS(user=username)
 
-	return [session, status]
+	return [US, status]
 
 def get_session_from_cookie(env):
-	user_session=None
+	US=None
 
 	# get auth=$TOKEN from user cookie
 	cookie_user_raw = env.get('HTTP_COOKIE', '')
@@ -335,9 +357,9 @@ def get_session_from_cookie(env):
 
 	auth = cookie_user.get('auth', cookies.Morsel())
 	if auth.value is not None:
-		user_session = get_session_by_token(auth.value)
+		US = get_session_by_token(auth.value)
 
-	return user_session	
+	return US	
 
 def generate_page_login(form, SR, extra_headers, msg):
 	base=''
@@ -364,51 +386,53 @@ def handle_login(env, SR, logout=False):
 	msg='welcome, please login'
 
 	# check if user $TOKEN valid and authenticate as $USERNAME
-	user_session = get_session_from_cookie(env)
+	US = get_session_from_cookie(env)
 
 	printd('handle_login: logout=%d' % logout)
 
-	if user_session is not None:
+	if US is not None:
+		username = US_user(US)
 		# check if user requests logout
 		if logout:
-			printd('logout initiated for %s' % user_session[1])
-			drop_session_by_username(user_session[1])
-			msg = 'logged out %s successfully' % user_session[1]
-			user_session = None
+			printd('logout initiated for %s' % username)
+			drop_session_by_username(username)
+			msg = 'logged out %s successfully' % username
+			US = None
 		else:
-			msg = 'you are logged in as %s' % user_session[1]
+			msg = 'you are logged in as %s' % username
 	
 	# if not already logged in from cookie and if posting credentials
 	login_status=None
-	if user_session is None and is_post_req(env):
+	if US is None and is_post_req(env):
 		# attempt to login using credentials from body
-		[user_session, login_status] = login_creds_from_body(env)
+		[US, login_status] = login_creds_from_body(env)
 	
 
 	# put cookie in here to set user cookie
 	extra_headers = []
 	# we made an attemmpt to login, handle the login response
-	if login_status is not None:
+	if login_status:
+		username = US_user(US)
 		if login_status == CREDS_BAD:
 			msg = 'incorrect login'
 		elif login_status == CREDS_CONFLICT:
-			msg = 'existing open session for user %s' % user_session[1]
-			# user_session only contains the username when creds conflict
+			msg = 'existing open session for user %s' % username
+			# US only contains the username when creds conflict
 			# to create this message. Now we clear it to normalize logic
-			user_session=None
+			US=None
 		elif login_status == CREDS_OK:
-			msg = 'start new session for user %s' % user_session[1]
+			msg = 'start new session for user %s' % username
 			# we just logged in as $USERNAMAE
-			extra_headers.append(set_cookie_header("auth", user_session[0]))
+			extra_headers.append(set_cookie_header("auth", US_token(US)))
 	
 	
 	# default to login form unless we have a valid user_session
 	main_form = FORM_LOGIN
-	if user_session is not None:
-		expiry_dt = datetime.datetime.fromtimestamp(user_session[2])
+	if US:
+		expiry_dt = datetime.datetime.fromtimestamp(US_expiry(US))
 		main_form = FORM_LOGOUT  % {
-			'token' : user_session[0],
-			'username' : user_session[1],
+			'token' : US_token(US),
+			'username' : US_user(US),
 			'expiry' : expiry_dt.strftime('%a, %d %b %Y %H:%M:%S GMT'),
 			'remaining' : str(expiry_dt - datetime.datetime.utcnow()),
 			'logout_button' : FORM_LOGOUT_INTERNAL
