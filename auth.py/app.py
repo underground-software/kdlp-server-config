@@ -1,10 +1,9 @@
 from urllib.parse import parse_qs
 from html import escape
 from http import cookies
-import sys, datetime, bcrypt, sqlite3, hashlib
-import random
+import sys, datetime, bcrypt, sqlite3, hashlib, random
 
-form="""
+form_login="""
 	<form id="login" method="post" action="/login">
 		<label for="username">Username:<br /></label>
 		<input name="username" type="text" id="username" />
@@ -14,7 +13,56 @@ form="""
 	<br />
 		<button type="submit">Submit</button>
 	</form>
+"""
 
+form_logout="""
+	<div class="logout_left">
+	<table>
+	<tr>
+		<th>Cookie Key</th>
+		<th>Value</th>
+	</tr>
+	<tr>
+		
+		<td>Token</td>
+		<td>%(token)s</td>
+	</tr>
+	<tr>
+		
+		<td>Username</td>
+		<td>%(username)s</td>
+	</tr>
+	<tr>
+		
+		<td>Expiry</td>
+		<td>%(expiry)s</td>
+	</tr>
+	<tr>
+		
+		<td>Remaining</td>
+		<td>%(remaining)s</td>
+	</tr>
+	</table>
+	</div>
+
+	<div class="logout_right">
+	<a href="/login/index.md">Authorizied Home</a>
+	<br />
+	<a href="/login/second.md">Authorizied Second Page</a>
+	</div>
+
+	<form id="logout" method="post" action="/login/logout.md">
+		<button type="submit">Logout</button>
+	</form>
+"""	
+
+form="""
+	%(form)s
+	
+	%(debug)s
+"""
+
+debug_table="""
 	<br />
 	<table>
 	<tr>
@@ -34,9 +82,6 @@ form="""
 		<td>Username</td>
 		<td>%(user)s</td>
 	</tr>
-	<tr>
-		<td>Password</td>
-		<td>%(pass)s</td>
 	<tr>
 		<td>Password Hash</td>
 		<td>%(pwdhash)s</td>
@@ -61,6 +106,8 @@ def bytes8(string):
 def str8(string):
 	return str(string, "UTF-8")
 
+KDLP_SESSIONS_DB='sessions.db'
+
 def new_session_token(session_username):
 	
 	if get_session_by_username(session_username) is not None:
@@ -69,8 +116,6 @@ def new_session_token(session_username):
 	# Make a session_token out of sha256(username + time + random string)
 	session_token = hashlib.sha256(bytes8(session_username + str(datetime.datetime.now())) \
 		+ bytes8(''.join(random.choices("ABCDEFGHIJ",k=10)))).hexdigest()
-
-	KDLP_SESSIONS_DB='sessions.db'
 
 	# sessions expire in 15 minutes for now
 	session_expiry = (datetime.datetime.utcnow() + datetime.timedelta(minutes=15)).timestamp()
@@ -90,7 +135,6 @@ def new_session_token(session_username):
 	return session_token
 
 def drop_session_by_username(session_username):
-	KDLP_SESSIONS_DB='sessions.db'
 	db = sqlite3.connect(KDLP_SESSIONS_DB)
 	db_cur = db.cursor()
 	db_comm = "DELETE FROM sessions WHERE user = \"%s\";" % session_username
@@ -103,7 +147,20 @@ def drop_session_by_username(session_username):
 	db.close()
 	return
 
-def get_session_by_username(session_username):
+def drop_session_by_token(session_token):
+	db = sqlite3.connect(KDLP_SESSIONS_DB)
+	db_cur = db.cursor()
+	db_comm = "DELETE FROM sessions WHERE token = \"%s\";" % session_token
+	
+	print("RUN SQL: %s" % db_comm, file=sys.stderr)
+	res = db_cur.execute(db_comm)
+
+	res.execute("COMMIT;")
+
+	db.close()
+	return
+
+def _get_session_by_username(session_username):
 	KDLP_SESSIONS_DB='sessions.db'
 	db = sqlite3.connect(KDLP_SESSIONS_DB)
 	db_cur = db.cursor()
@@ -114,11 +171,30 @@ def get_session_by_username(session_username):
 	res = db_cur.execute(db_comm)
 	results = res.fetchone()
 
-	print("get_by_username(%s)=%s" % (session_username, results), file=sys.stderr)
+	print("_get_by_username(%s)=%s" % (session_username, results), file=sys.stderr)
 
 	db.close()
 
 	return results
+
+def get_session_by_username(session_username):
+	session = _get_session_by_username(session_username)
+	if session is None:
+		return None	
+
+
+	nowunix = datetime.datetime.utcnow().timestamp()
+	session_expiry = session[2]
+
+	expired = nowunix > session_expiry
+
+	print("get_by_username(%s)=%s, now=%s, expiry=%s, expired=%d" % (session_username, session, nowunix, session_expiry, expired), file=sys.stderr)
+
+	if expired:
+		drop_session_by_username(session_username)
+		return get_session_by_username(session_username)
+
+	return session
 
 def _get_session_by_token(session_token):
 	KDLP_SESSIONS_DB='sessions.db'
@@ -143,9 +219,15 @@ def get_session_by_token(session_token):
 		return None	
 
 	nowunix = datetime.datetime.utcnow().timestamp()
+	session_expiry = session[2]
 
-	print("get_by_token(%s)=%s, now=%s" % (session_token, session, nowunix), file=sys.stderr)
+	expired = nowunix > session_expiry
 
+	print("get_by_token(%s)=%s, now=%s, expiry=%s, expired=%d" % (session_token, session, nowunix, session_expiry, expired), file=sys.stderr)
+
+	if expired:
+		drop_session_by_token(session_token)
+		return get_session_by_token(session_token)
 	return session
 
 def application(env, start_response):
@@ -165,14 +247,15 @@ def application(env, start_response):
 		elif path_info == "/check":
 			token = queries.get('token',[''])[0]
 			#start_response('200 Ok', [('Content-Type', 'text/plain')])
-			start_response('200 OK', [('Content-Type', 'application/x-www-form-urlencoded')])
 			if len(token) > 0:
 				session = get_session_by_token(token)
 				# If we have an unexpired session, the bearer
 				# of the token is authenticated
 				if session is not None:
+					start_response('200 OK', [('Content-Type', 'application/x-www-form-urlencoded')])
 					return [bytes8('auth=%s' % session[1])]
 				else:
+					start_response('401 Unauthorized', [('Content-Type', 'application/x-www-form-urlencoded')])
 					return [bytes8('auth=nil')]
 			else:
 				return [b'no token given']
@@ -226,21 +309,13 @@ def application(env, start_response):
 	pwdhash=b''
 	if len(password) > 0:
 		pwdhash = bcrypt.hashpw(bytes8(password), bcrypt.gensalt())
-	base += form % {
-		'length' : req_body_size,
-		'input' : str8(req_body),
-		'user' : username,
-		'pass' : password,
-		'pwdhash' : str8(pwdhash)
-	}
-	
 	KDLP_USERS_DB = 'users.db'
 	# if the body is not empty, we are getting a post request, check the password
 	match = False
 	if req_body_size > 0:
 		db = sqlite3.connect(KDLP_USERS_DB)
 		db_cur = db.cursor()
-		res = db_cur.execute("select pwdhash from users where username = \"%s\"" % username)
+		res = db_cur.execute("select pwdhash from users where username = \"%s\";" % username)
 		res_content = res.fetchone()
 		if res_content is not None:
 			saved_hash = res_content[0]
@@ -255,13 +330,10 @@ def application(env, start_response):
 	
 	cookie_user.load(cookie_user_raw)
 	
-	auth = cookie_user.get('auth',cookies.Morsel())
-	
-	print("raw: %s" % str(cookie_user_raw), file=sys.stderr)
-	print("cookie: %s" % str(auth.value), file=sys.stderr)
 
 	cookie_header = (None, None)
 	cookie_content = cookie_header[1]
+	session_token=None
 	if match == True:
 		session_token = new_session_token(username)
 		# only set the new token cookie if there isnt an active session
@@ -282,10 +354,54 @@ def application(env, start_response):
 		return b"<br /><hr /><br /><code>%s = %s</code><br />" % \
 			(bytes8(name), bytes8(str(var)))
 
+	auth = cookie_user.get('auth',cookies.Morsel())
+	user_session=None
+	if auth.value is not None:
+		user_session = get_session_by_token(auth.value)
+	
+	#print("raw: %s" % str(cookie_user_raw), file=sys.stderr)
+	#print("cookie: %s" % str(auth.value), file=sys.stderr)
+
+	main_form = form_login
+	if user_session is not None:
+		expiry_dt = datetime.datetime.fromtimestamp(user_session[2])
+		main_form = form_logout % {
+			'token' : user_session[0],
+			'username' : user_session[1],
+			'expiry' : expiry_dt.strftime('%a, %d %b %Y %H:%M:%S GMT'),
+			'remaining' : str(expiry_dt - datetime.datetime.utcnow())
+		}
+
+	if session_token is not None:
+		session = get_session_by_token(session_token)
+		expiry_dt = datetime.datetime.fromtimestamp(session[2])
+		main_form = form_logout % {
+			'token' : session[0],
+			'username' : session[1],
+			'expiry' : expiry_dt.strftime('%a, %d %b %Y %H:%M:%S GMT'),
+			'remaining' : str(expiry_dt - datetime.datetime.utcnow())
+		}
+
+	debug = False
+	debug_form = ""
+	if debug:
+		debug_form = debug_table % {
+			'length' : req_body_size,
+			'input' : str8(req_body),
+			'user' : username,
+			'pwdhash' : str8(pwdhash)
+		}
+
+	base += form % {
+		'form': main_form,
+		'debug': debug_form
+	}
+	
 	return [bytes8(base),
-		dump_as_str("msg", msg),
-		dump_as_str("match", match),
-		dump_as_str("cookie-set", cookie_content),
-		dump_as_str("cookie-received", cookie_user),
-		dump_as_str("env", env),
+		#dump_as_str("msg", msg),
+		#dump_as_str("authorized, new_session", (match, session_token)),
+		#dump_as_str("user", username if len(username) > 0 else "nil"),
+		#dump_as_str("cookie-set", cookie_content),
+		#dump_as_str("cookie-received", cookie_user),
+		#dump_as_str("env", env),
 	b"<br /><hr />"]
