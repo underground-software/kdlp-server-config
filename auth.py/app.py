@@ -55,10 +55,21 @@ FORM_LOGOUT="""
 	<a href="/login/second.md">Authorizied Second Page</a>
 	</div>
 
+	%(logout_button)s
+"""	
+
+FORM_LOGOUT_EXTERNAL="""
 	<form id="logout" method="post" action="/login/logout.md">
 		<button type="submit">Logout</button>
 	</form>
-"""	
+"""
+
+FORM_LOGOUT_INTERNAL="""
+	<form id="logout" method="get" action="/login">
+		<input type="hidden" name="logout" value="true">
+		<button type="submit">Logout</button>
+	</form>
+"""
 
 # Source: https://stackoverflow.com/questions/14107260/set-a-cookie-and-retrieve-it-with-python-and-wsgi
 def set_cookie_header(name, value, days=0, minutes=15):
@@ -286,7 +297,7 @@ def get_pwdhash_by_user(username):
 CREDS_OK	=0
 CREDS_CONFLICT	=1
 CREDS_BAD	=2
-def check_creds_from_body(env):
+def login_creds_from_body(env):
 	session=None
 	username=''
 	status = CREDS_BAD
@@ -319,9 +330,7 @@ def get_session_from_cookie(env):
 
 	# get auth=$TOKEN from user cookie
 	cookie_user_raw = env.get('HTTP_COOKIE', '')
-	
 	cookie_user = cookies.BaseCookie('')
-	
 	cookie_user.load(cookie_user_raw)
 
 	auth = cookie_user.get('auth', cookies.Morsel())
@@ -351,19 +360,29 @@ def generate_page_login(form, SR, extra_headers, msg):
 
 	return ok_html_docs_headers(base, extra, extra_headers, SR)
 		
-def handle_login(env, SR):
+def handle_login(env, SR, logout=False):
 	msg='welcome, please login'
 
 	# check if user $TOKEN valid and authenticate as $USERNAME
 	user_session = get_session_from_cookie(env)
+
+	printd('handle_login: logout=%d' % logout)
+
 	if user_session is not None:
-		msg = 'you are logged in as %s' % user_session[1]
+		# check if user requests logout
+		if logout:
+			printd('logout initiated for %s' % user_session[1])
+			drop_session_by_username(user_session[1])
+			msg = 'logged out %s successfully' % user_session[1]
+			user_session = None
+		else:
+			msg = 'you are logged in as %s' % user_session[1]
 	
 	# if not already logged in from cookie and if posting credentials
 	login_status=None
 	if user_session is None and is_post_req(env):
 		# attempt to login using credentials from body
-		[user_session, login_status] = check_creds_from_body(env)
+		[user_session, login_status] = login_creds_from_body(env)
 	
 
 	# put cookie in here to set user cookie
@@ -391,11 +410,16 @@ def handle_login(env, SR):
 			'token' : user_session[0],
 			'username' : user_session[1],
 			'expiry' : expiry_dt.strftime('%a, %d %b %Y %H:%M:%S GMT'),
-			'remaining' : str(expiry_dt - datetime.datetime.utcnow())
+			'remaining' : str(expiry_dt - datetime.datetime.utcnow()),
+			'logout_button' : FORM_LOGOUT_INTERNAL
 		}
 
 	return generate_page_login(main_form, SR, extra_headers, msg)
 
+def check_logout(queries):
+	logout = queries.get('logout', '')
+	printd('check logout query: %s' % logout)
+	return logout == ['true']
 
 def application(env, SR):
 
@@ -407,7 +431,7 @@ def application(env, SR):
 		% (str(path_info), str(queries)))
 
 	if path_info == "/login":
-		return handle_login(env, SR)
+		return handle_login(env, SR, logout=check_logout(queries))
 	elif path_info == "/check":
 		return handle_check(queries, SR)
 	elif path_info == "/logout":
