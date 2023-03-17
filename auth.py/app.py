@@ -58,10 +58,6 @@ FORM_LOGOUT="""
 	</form>
 """	
 
-KDLP_SESSIONS_DB='sessions.db'
-KDLP_USERS_DB = 'users.db'
-KDLP_URLBASE='/var/www/html/kdlp.underground.software/'
-
 # Source: https://stackoverflow.com/questions/14107260/set-a-cookie-and-retrieve-it-with-python-and-wsgi
 def set_cookie_header(name, value, days=0, minutes=15):
     dt = datetime.datetime.now() + datetime.timedelta(days=days,minutes=minutes)
@@ -70,6 +66,10 @@ def set_cookie_header(name, value, days=0, minutes=15):
     secs = 60 * 15
     return ('Set-Cookie', '{}={}; Expires={}; Max-Age={}; Path=/'.format(name, value, fdt, secs))
 
+
+def printd(string):
+	return print(string, file=sys.stderr)
+
 # shortand for bytes(string, "UTF-8")
 def bytes8(string):
 	return bytes(string, "UTF-8")
@@ -77,6 +77,73 @@ def bytes8(string):
 # shortand for str(string, "UTF-8")
 def str8(string):
 	return str(string, "UTF-8")
+
+def do_sqlite3_comm(db, comm, commit=False, fetch=False):
+	result=None
+	db_con = sqlite3.connect(db)
+	db_cur0 = db_con.cursor()
+	
+	printd("RUN SQL: %s" % comm)
+	db_cur1 = db_cur0.execute(comm)
+
+	if fetch:
+		result=db_cur1.fetchone()
+		printd("SQL RES: %s" % str(result))
+
+	if commit:
+		printd("RUN SQL: COMMIT;")
+		db_cur2 = db_cur1.execute("COMMIT;")
+
+	db_con.close()
+
+	return result
+
+
+KDLP_SESSIONS_DB='sessions.db'
+KDLP_USERS_DB = 'users.db'
+KDLP_URLBASE='/var/www/html/kdlp.underground.software/'
+
+def session_enum():
+	session_enum.cnt += 1
+	return session_enum.cnt
+session_enum.cnt = 0
+
+# data = (token,..)
+SESSION_GET_TOKEN=session_enum()
+SESSION_GET_TOKEN_COMM="SELECT token, user, expiry FROM sessions WHERE token = \"%s\";"
+
+# data = (...,user,...)
+SESSION_GET_USER=session_enum()
+SESSION_GET_USER_COMM="SELECT token, user, expiry FROM sessions WHERE user= \"%s\";"
+
+# data = (token, user, expiry)
+SESSION_NEW=session_enum()
+SESSION_NEW_COMM="INSERT INTO sessions (token, user, expiry) VALUES (\"%s\", \"%s\", \"%s\");"
+
+# data = (token,..)
+SESSION_DROP_TOKEN=session_enum()
+SESSION_DROP_TOKEN_COMM = "DELETE FROM sessions WHERE token = \"%s\";"
+
+# data = (...,user,...)
+SESSION_DROP_USER=session_enum()
+SESSION_DROP_USER_COMM = "DELETE FROM sessions WHERE user = \"%s\";"
+
+def _do_sessions_comm(comm, commit=False, fetch=False):
+	return do_sqlite3_comm(KDLP_SESSIONS_DB, comm, commit=commit, fetch=fetch)
+
+def do_sessions_comm(comm, data=None):
+	if   comm == SESSION_NEW:
+		return _do_sessions_comm(SESSION_NEW_COMM % data, commit=True)
+	elif comm == SESSION_GET_TOKEN:
+		return _do_sessions_comm(SESSION_GET_TOKEN_COMM % (data[0]), fetch=True)
+	elif comm == SESSION_GET_USER:
+		return _do_sessions_comm(SESSION_GET_USER_COMM % (data[1]), fetch=True)
+	elif comm == SESSION_DROP_TOKEN:
+		return _do_sessions_comm(SESSION_DROP_TOKEN_COMM % (data[0]), commit=True)
+	elif comm == SESSION_DROP_USER:
+		return _do_sessions_comm(SESSION_DROP_USER_COMM % (data[1]), commit=True)
+	else:
+		printd("unknown sessions comm type")
 
 def new_session_by_username(session_username):
 	
@@ -91,112 +158,46 @@ def new_session_by_username(session_username):
 	# sessions expire in 15 minutes for now
 	session_expiry = (datetime.datetime.utcnow() + datetime.timedelta(minutes=15)).timestamp()
 
-	db = sqlite3.connect(KDLP_SESSIONS_DB)
-	db_cur = db.cursor()
-	db_comm = "INSERT INTO sessions (token, user, expiry) VALUES (\"%s\", \"%s\", \"%s\");" % \
-		(session_token, session_username, session_expiry)
-	
-	print("RUN SQL: %s" % db_comm, file=sys.stderr)
-	res = db_cur.execute(db_comm)
-
-	res.execute("COMMIT;")
-	
-	db.close()
+	do_sessions_comm(SESSION_NEW, (session_token, session_username, session_expiry))
 
 	return get_session_by_username(session_username)
 
 def drop_session_by_username(session_username):
-	db = sqlite3.connect(KDLP_SESSIONS_DB)
-	db_cur = db.cursor()
-	db_comm = "DELETE FROM sessions WHERE user = \"%s\";" % session_username
-	
-	print("RUN SQL: %s" % db_comm, file=sys.stderr)
-	res = db_cur.execute(db_comm)
-
-	res.execute("COMMIT;")
-
-	db.close()
+	do_sessions_comm(SESSION_DROP_USER, (None, session_username, None))
 	return
 
 def drop_session_by_token(session_token):
-	db = sqlite3.connect(KDLP_SESSIONS_DB)
-	db_cur = db.cursor()
-	db_comm = "DELETE FROM sessions WHERE token = \"%s\";" % session_token
-	
-	print("RUN SQL: %s" % db_comm, file=sys.stderr)
-	res = db_cur.execute(db_comm)
-
-	res.execute("COMMIT;")
-
-	db.close()
+	do_sessions_comm(SESSION_DROP_TOKEN, (session_token, None, None))
 	return
 
-def _get_session_by_username(session_username):
-	db = sqlite3.connect(KDLP_SESSIONS_DB)
-	db_cur = db.cursor()
-	db_comm = "SELECT token, user, expiry FROM sessions WHERE user = \"%s\";" % session_username
-	
-
-	print("RUN SQL: %s" % db_comm, file=sys.stderr)
-	res = db_cur.execute(db_comm)
-	results = res.fetchone()
-
-	print("_get_by_username(%s)=%s" % (session_username, results), file=sys.stderr)
-
-	db.close()
-
-	return results
-
 def get_session_by_username(session_username):
-	session = _get_session_by_username(session_username)
+	session = do_sessions_comm(SESSION_GET_USER, (None, session_username, None))
 	if session is None:
 		return None	
 
-
-	nowunix = datetime.datetime.utcnow().timestamp()
 	session_expiry = session[2]
-
-	expired = nowunix > session_expiry
-
-	print("get_by_username(%s)=%s, now=%s, expiry=%s, expired=%d" % (session_username, session, nowunix, session_expiry, expired), file=sys.stderr)
-
-	if expired:
+	
+	# if the current timestamp is greater than session expiry,
+	# purge the old session from the databse and return none 
+	# by re-trying the request
+	if datetime.datetime.utcnow().timestamp() > session_expiry:
 		drop_session_by_username(session_username)
 		return get_session_by_username(session_username)
 
 	return session
 
-def _get_session_by_token(session_token):
-	db = sqlite3.connect(KDLP_SESSIONS_DB)
-	db_cur = db.cursor()
-	db_comm = "SELECT token, user, expiry FROM sessions WHERE token = \"%s\";" % session_token
-
-	print("RUN SQL: %s" % db_comm, file=sys.stderr)
-	res = db_cur.execute(db_comm)
-	results = res.fetchone()
-
-	print("_get_by_token(%s)=%s" % (session_token, results), file=sys.stderr)
-
-	db.close()
-
-	return results
-
 # return none if token is expired and also purge old entry
 def get_session_by_token(session_token):
-	session = _get_session_by_token(session_token)
+	session = do_sessions_comm(SESSION_GET_TOKEN,(session_token, None, None))
 	if session is None:
 		return None	
 
-	nowunix = datetime.datetime.utcnow().timestamp()
 	session_expiry = session[2]
 
-	expired = nowunix > session_expiry
-
-	print("get_by_token(%s)=%s, now=%s, expiry=%s, expired=%d" % \
-		(session_token, session, nowunix, session_expiry, expired), \
-		file=sys.stderr)
-
-	if expired:
+	# if the current timestamp is greater than session expiry,
+	# purge the old session from the databse and return none 
+	# by re-trying the request
+	if datetime.datetime.utcnow().timestamp() > session_expiry:
 		drop_session_by_token(session_token)
 		return get_session_by_token(session_token)
 	return session
@@ -225,7 +226,7 @@ def notfound_urlencoded(content, start_response):
 		'application/x-www-form-urlencoded')])
 	return [bytes8(content)]
 	
-def handle_check(token, start_response):
+def _handle_check(token, start_response):
 	session = get_session_by_token(token)
 
 	# If we have an unexpired session, the bearer
@@ -235,7 +236,14 @@ def handle_check(token, start_response):
 	else:
 		return unauth_urlencoded('auth=nil', start_response)
 
-def handle_logout(username, start_response):
+def handle_check(queries, start_response):
+	token = queries.get('token',[''])[0]
+	if len(token) > 0:
+		return _handle_check(token, start_response)
+	else:
+		return ok_urlencoded('error="No token= supplied in URL. Nothing done."', start_response)
+
+def _handle_logout(username, start_response):
 	session = get_session_by_username(username)
 
 	# see comment in handle_check()
@@ -244,6 +252,13 @@ def handle_logout(username, start_response):
 		return ok_urlencoded('logout=%s' % username, start_response)
 	else:
 		return notfound_urlencoded('logout=nil', start_response)
+
+def handle_logout(queries, start_response):
+	username = queries.get('username',[''])[0]
+	if len(username) > 0:
+		return _handle_logout(username, start_response)
+	else:
+		return ok_urlencoded('error="No username= suplied in URL. Nothing done."', start_response)
 
 def get_req_body_size(env):
 	try:
@@ -278,15 +293,20 @@ def check_creds_from_body(env):
 	username=''
 	status = CREDS_BAD
 	req_body_size= get_req_body_size(env)
+
 	if (req_body_size > 0):
 		req_body = env['wsgi.input'].read(req_body_size) 
 		data = parse_qs(req_body)
 
+		# get actual urlencoded body content
 		username = escape(str8(data.get(bytes8('username'), [b''])[0]))
 		password = escape(str8(data.get(bytes8('password'), [b''])[0]))
 
+		# plaintext password immediately checked and only used here
 		pwdhash=get_pwdhash_by_user(username)
 		if pwdhash is not None and bcrypt.checkpw(bytes8(password), bytes8(pwdhash)):
+			# if the password is valid,
+			# try to start a new session right away
 			session = new_session_by_username(username)
 			# session for $username already exists if we still get None
 			status = CREDS_CONFLICT if session is None else CREDS_OK
@@ -381,29 +401,18 @@ def handle_login(env, start_response):
 
 def application(env, start_response):
 
-	# save pat info and query string
 	path_info = env.get("PATH_INFO", "")
 	query_string = env.get("QUERY_STRING", "")
 	queries = parse_qs(query_string)
 
-	# branch based on path
-	if path_info == "/":
-		# / which is not used right now
-		return ok_text("login home", start_response)
+	printd("New request: path_info=\"%s\", queries=\"%s\"" \
+		% (str(path_info), str(queries)))
+
 	if path_info == "/login":
-		# path content is below
 		return handle_login(env, start_response)
 	elif path_info == "/check":
-		token = queries.get('token',[''])[0]
-		if len(token) > 0:
-			return handle_check(token, start_response)
-		else:
-			return ok_urlencoded('error="No token= supplied in URL. Nothing done."', start_response)
+		return handle_check(queries, start_response)
 	elif path_info == "/logout":
-		username = queries.get('username',[''])[0]
-		if len(username) > 0:
-			return handle_logout(username, start_response)
-		else:
-			return ok_urlencoded('error="No username= suplied in URL. Nothing done."', start_response)
+		return handle_logout(queries, start_response)
 	else:
 		return notfound_urlencoded('error="Page not found."', start_response)
