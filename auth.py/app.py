@@ -316,9 +316,9 @@ def get_pwdhash_by_user(username):
 
 	return result
 
-CREDS_OK	=0
-CREDS_CONFLICT	=1
-CREDS_BAD	=2
+CREDS_OK	= 0
+CREDS_CONFLICT	= 1
+CREDS_BAD	= 2
 def login_creds_from_body(env):
 	US=None
 	username=''
@@ -385,17 +385,19 @@ def generate_page_login(form, SR, extra_headers, msg):
 def handle_login(env, SR, logout=False):
 	msg='welcome, please login'
 
+	# put cookie in here to set user cookie
+	extra_headers = []
+
 	# check if user $TOKEN valid and authenticate as $USERNAME
 	US = get_session_from_cookie(env)
-
-	printd('handle_login: logout=%d' % logout)
-
 	if US:
 		username = US_user(US)
 		# check if user requests logout
 		if logout:
 			printd('logout initiated for %s' % username)
 			drop_session_by_username(username)
+			# clear local cookie on logout
+			extra_headers.append(set_cookie_header("auth", ""))
 			msg = 'logged out %s successfully' % username
 			US = None
 		else:
@@ -408,10 +410,7 @@ def handle_login(env, SR, logout=False):
 		[US, login_status] = login_creds_from_body(env)
 	
 
-	# put cookie in here to set user cookie
-	extra_headers = []
 	# we made an attemmpt to login, handle the login response
-	printd('status=%s, US=%s'% (login_status, str(US)))
 	if login_status is not None:
 		if login_status == CREDS_BAD:
 			msg = 'incorrect login'
