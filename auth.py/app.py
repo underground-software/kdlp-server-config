@@ -7,6 +7,7 @@ import sys, datetime, bcrypt, sqlite3, hashlib, random
 # FYI: define US to mean user session
 
 VERSION="0.2"
+APPLICATION="venus"
 
 FORM_LOGIN="""
 	<form id="login" method="post" action="/login">
@@ -51,9 +52,27 @@ FORM_LOGOUT="""
 	</div>
 
 	<div class="logout_right">
+
+	<h3> Test Pages </h3>
+	<ul>
+	<li>
 	<a href="/login/index.md">Authorizied Home</a>
-	<br />
+	</li>
+	
+	<li>
 	<a href="/login/second.md">Authorizied Second Page</a>
+	</li>
+	</ul>
+
+	<h3> Underground Software </h3>
+	<ul>
+	<li>
+	<a href="/US">Home</a>
+	</li>
+	<li>
+	<a href="/game">Game</a>
+	</li>
+	</ul>
 	</div>
 
 	%(logout_button)s
@@ -241,19 +260,17 @@ def get_session_by_token(session_token):
 		return get_session_by_token(session_token)
 	return US
 
-	
-def ok_html_docs_headers(document, extra_docs, extra_headers, SR):
+def ok_html(doc, SR, extra_docs=[], extra_headers=[]):
 	SR('200 OK', [('Content-Type', 'text/html')] + extra_headers)
-	return [bytes8(document)] + [bytes8(d) for d in extra_docs]
+	return [bytes8(doc)] + [bytes8(d) for d in extra_docs]
 
-def ok_text(text, SR):
-	SR('200 OK', [('Content-Type', 'text/plain')])
-	return [bytes8(text)]
+def ok_text(text, SR, extra_text=[], extra_headers=[]):
+	SR('200 OK', [('Content-Type', 'text/plain')] + extra_headers)
+	return [bytes8(text)] + [bytes8(t) for t in extra_text]
 
-
-def ok_urlencoded(content, SR):
-	SR('200 OK', [('Content-Type', 'application/x-www-form-urlencoded')])
-	return [bytes8(content)]
+def ok_urlencoded(content, SR, extra_content=[], extra_headers=[]):
+	SR('200 OK', [('Content-Type', 'application/x-www-form-urlencoded')] + extra_headers)
+	return [bytes8(content)] + [bytes8(c) for c in extra_content]
 
 def unauth_urlencoded(content, SR):
 	SR('401 Unauthorized', [('Content-Type', \
@@ -266,12 +283,15 @@ def notfound_urlencoded(content, SR):
 	return [bytes8(content)]
 	
 def _handle_check(token, SR):
-	session = get_session_by_token(token)
+	US = get_session_by_token(token)
 
 	# If we have an unexpired session, the bearer
 	# of the token is authenticated as session[1]
-	if session is not None:
-		return ok_urlencoded('auth=%s' % session[1], SR)
+	if US is not None:
+		username = US_user(US)
+		# include authorized username in HTTP headers
+		return ok_urlencoded('auth=%s' % username, SR,
+			extra_headers=[('X-Auth-User', username)])
 	else:
 		return unauth_urlencoded('auth=nil', SR)
 
@@ -283,10 +303,10 @@ def handle_check(queries, SR):
 		return unauth_urlencoded('error="No token= supplied in URL. Nothing done."', SR)
 
 def _handle_logout(username, SR):
-	session = get_session_by_username(username)
+	US = get_session_by_username(username)
 
 	# see comment in handle_check()
-	if session is not None:
+	if US is not None:
 		drop_session_by_username(username)
 		return ok_urlencoded('logout=%s' % username, SR)
 	else:
@@ -396,9 +416,9 @@ def generate_page_login(form, SR, extra_headers, msg):
 
 	base += form 
 	extra = [dump_line(), dump_as_str("message", msg),
-		dump_as_str("auth.py", VERSION), dump_line()]
+		dump_as_str("version", APPLICATION + " " + VERSION), dump_line()]
 
-	return ok_html_docs_headers(base, extra, extra_headers, SR)
+	return ok_html(base, SR, extra_docs=extra, extra_headers=extra_headers)
 
 
 def check_logout(queries):
