@@ -320,7 +320,7 @@ CREDS_OK	=0
 CREDS_CONFLICT	=1
 CREDS_BAD	=2
 def login_creds_from_body(env):
-	session=None
+	US=None
 	username=''
 	status = CREDS_BAD
 	req_body_size= get_req_body_size(env)
@@ -411,17 +411,17 @@ def handle_login(env, SR, logout=False):
 	# put cookie in here to set user cookie
 	extra_headers = []
 	# we made an attemmpt to login, handle the login response
-	if login_status:
-		username = US_user(US)
+	printd('status=%s, US=%s'% (login_status, str(US)))
+	if login_status is not None:
 		if login_status == CREDS_BAD:
 			msg = 'incorrect login'
 		elif login_status == CREDS_CONFLICT:
-			msg = 'existing open session for user %s' % username
+			msg = 'existing open session for user %s' % US_user(US)
 			# US only contains the username when creds conflict
 			# to create this message. Now we clear it to normalize logic
 			US=None
 		elif login_status == CREDS_OK:
-			msg = 'start new session for user %s' % username
+			msg = 'start new session for user %s' % US_user(US)
 			# we just logged in as $USERNAMAE
 			extra_headers.append(set_cookie_header("auth", US_token(US)))
 	
