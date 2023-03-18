@@ -68,7 +68,11 @@ FORM_LOGOUT_EXTERNAL="""
 FORM_LOGOUT_INTERNAL="""
 	<form id="logout" method="get" action="/login">
 		<input type="hidden" name="logout" value="true">
-		<button type="submit">Logout</button>
+		<button type="submit" class="logout">Logout</button>
+	</form>
+	<form id="renew" method="get" action="/login">
+		<input type="hidden" name="renew" value="true">
+		<button type="submit" class="renew">Renew</button>
 	</form>
 """
 
@@ -276,7 +280,7 @@ def handle_check(queries, SR):
 	if len(token) > 0:
 		return _handle_check(token, SR)
 	else:
-		return ok_urlencoded('error="No token= supplied in URL. Nothing done."', SR)
+		return unauth_urlencoded('error="No token= supplied in URL. Nothing done."', SR)
 
 def _handle_logout(username, SR):
 	session = get_session_by_username(username)
@@ -338,7 +342,7 @@ def login_creds_from_body(env):
 		if pwdhash is not None and bcrypt.checkpw(bytes8(password), bytes8(pwdhash)):
 			# if the password is valid,
 			# try to start a new session right away
-			US  = new_session_by_username(username)
+			US = new_session_by_username(username)
 			# session for $username already exists if we still get None
 			status = CREDS_CONFLICT if US is None else CREDS_OK
 
@@ -346,6 +350,20 @@ def login_creds_from_body(env):
 		US = mkUS(user=username)
 
 	return [US, status]
+
+def renew_session(US):
+	# refresh US
+	US = get_session_by_token(US_token(US))
+
+	# if it's gone, dont dropt it
+	if US:
+		drop_session_by_token(US_token(US))
+
+	# if the token is not expired, issue a new one
+	if US and not US_expired(US):
+		US = new_session_by_username(US_user(US))
+		
+	return US
 
 def get_session_from_cookie(env):
 	US=None
@@ -381,10 +399,17 @@ def generate_page_login(form, SR, extra_headers, msg):
 		dump_as_str("auth.py", VERSION), dump_line()]
 
 	return ok_html_docs_headers(base, extra, extra_headers, SR)
-		
-def handle_login(env, SR, logout=False):
-	msg='welcome, please login'
 
+
+def check_logout(queries):
+	return queries.get('logout', '') == ['true']
+
+def check_renew(queries):
+	return queries.get('renew', '') == ['true']
+		
+def handle_login(queries, SR, env):
+	msg='welcome, please login'
+	
 	# put cookie in here to set user cookie
 	extra_headers = []
 
@@ -393,13 +418,21 @@ def handle_login(env, SR, logout=False):
 	if US:
 		username = US_user(US)
 		# check if user requests logout
-		if logout:
+		if check_logout(queries):
 			printd('logout initiated for %s' % username)
 			drop_session_by_username(username)
 			# clear local cookie on logout
 			extra_headers.append(set_cookie_header("auth", ""))
 			msg = 'logged out %s successfully' % username
 			US = None
+		elif check_renew(queries):
+			printd('renew initiated for %s' % username)
+			US = renew_session(US)
+			if US is not None:
+				msg = 'renewed session for %s' % username
+				extra_headers.append(set_cookie_header("auth", US_token(US)))
+			else:
+				msg = 'failed to renew session for %s' % username 
 		else:
 			msg = 'you are logged in as %s' % username
 	
@@ -439,11 +472,6 @@ def handle_login(env, SR, logout=False):
 
 	return generate_page_login(main_form, SR, extra_headers, msg)
 
-def check_logout(queries):
-	logout = queries.get('logout', '')
-	printd('check logout query: %s' % logout)
-	return logout == ['true']
-
 def application(env, SR):
 
 	path_info = env.get("PATH_INFO", "")
@@ -454,7 +482,7 @@ def application(env, SR):
 		% (str(path_info), str(queries)))
 
 	if path_info == "/login":
-		return handle_login(env, SR, logout=check_logout(queries))
+		return handle_login(queries, SR, env)
 	elif path_info == "/check":
 		return handle_check(queries, SR)
 	elif path_info == "/logout":
