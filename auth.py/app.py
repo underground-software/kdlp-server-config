@@ -6,7 +6,7 @@ import sys, datetime, bcrypt, sqlite3, hashlib, random
 # FYI: define SR to mean start response
 # FYI: define US to mean user session
 
-VERSION="0.1"
+VERSION="0.2"
 
 FORM_LOGIN="""
 	<form id="login" method="post" action="/login">
