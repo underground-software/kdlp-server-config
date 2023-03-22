@@ -2,12 +2,33 @@ from urllib.parse import parse_qs
 from html import escape
 from http import cookies
 import sys, datetime, bcrypt, sqlite3, hashlib, random
+from subprocess import run, PIPE
 
 # FYI: define SR to mean start response
 # FYI: define US to mean user session
 
 VERSION="0.2"
 APPLICATION="venus"
+
+TXT_ALERT=True
+LOG_ALERT=True
+ALERT_LOGFILE='alert.log'
+
+def ALERT(msg):
+	if TXT_ALERT:
+		m = '%s: %s' % (appver(), msg)
+		o = run(['./textme.sh', m], stdout=PIPE, stderr=PIPE)
+		printd(o)
+	if LOG_ALERT:
+		t = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S GMT')
+		o ='log %s' % msg
+		m = '[%s] %s' % (t, msg)
+		try:
+			with open(ALERT_LOGFILE, 'a') as f:
+				print(m, file=f)
+		except Exception as e:
+			o += '\n%s' % str(e)
+		printd(o)
 
 FORM_LOGIN="""
 	<form id="login" method="post" action="/login">
@@ -22,6 +43,7 @@ FORM_LOGIN="""
 """
 
 FORM_LOGOUT="""
+	<div class="logout_info">
 	<div class="logout_left">
 	<table>
 	<tr>
@@ -53,7 +75,8 @@ FORM_LOGOUT="""
 
 	<div class="logout_right">
 
-	<h3> Test Pages </h3>
+	<div class="logout_right_inner">
+	<h5> Test Pages </h5>
 	<ul>
 	<li>
 	<a href="/login/index.md">Authorizied Home</a>
@@ -64,7 +87,7 @@ FORM_LOGOUT="""
 	</li>
 	</ul>
 
-	<h3> Underground Software </h3>
+	<h5> Underground Software </h5>
 	<ul>
 	<li>
 	<a href="/US">Home</a>
@@ -74,8 +97,12 @@ FORM_LOGOUT="""
 	</li>
 	</ul>
 	</div>
+	</div>
+	</div>
 
+	<div class="logout_buttons">
 	%(logout_button)s
+	</div>
 """	
 
 FORM_LOGOUT_EXTERNAL="""
@@ -96,11 +123,11 @@ FORM_LOGOUT_INTERNAL="""
 """
 
 # Source: https://stackoverflow.com/questions/14107260/set-a-cookie-and-retrieve-it-with-python-and-wsgi
-def set_cookie_header(name, value, days=0, minutes=15):
+def set_cookie_header(name, value, days=0, minutes=60):
     dt = datetime.datetime.now() + datetime.timedelta(days=days,minutes=minutes)
     fdt = dt.strftime('%a, %d %b %Y %H:%M:%S GMT')
     #secs = days * 86400
-    secs = 60 * 15
+    secs = 60 * 60
     return ('Set-Cookie', '{}={}; Expires={}; Max-Age={}; Path=/'.format(name, value, fdt, secs))
 
 # US (user session data) structure (token, user, expiry)
@@ -206,6 +233,8 @@ def do_sessions_comm(comm, US=None):
 
 def new_session_by_username(session_username):
 	
+	ALERT('start session for user %s ' % session_username)
+	
 	if get_session_by_username(session_username) is not None:
 		return None
 
@@ -214,8 +243,8 @@ def new_session_by_username(session_username):
 		+ str(datetime.datetime.now())) \
 		+ bytes8(''.join(random.choices("ABCDEFGHIJ",k=10)))).hexdigest()
 
-	# sessions expire in 15 minutes for now
-	session_expiry = (datetime.datetime.utcnow() + datetime.timedelta(minutes=15)).timestamp()
+	# sessions expire in 60 minutes for now
+	session_expiry = (datetime.datetime.utcnow() + datetime.timedelta(minutes=60)).timestamp()
 
 	do_sessions_comm(SESSION_NEW, mkUS(token=session_token, \
 		user=session_username, expiry=session_expiry))
@@ -382,7 +411,7 @@ def renew_session(US):
 	# if the token is not expired, issue a new one
 	if US and not US_expired(US):
 		US = new_session_by_username(US_user(US))
-		
+
 	return US
 
 def get_session_from_cookie(env):
@@ -399,24 +428,36 @@ def get_session_from_cookie(env):
 
 	return US	
 
-def generate_page_login(form, SR, extra_headers, msg):
+def appver():
+	return "%s %s" % (APPLICATION, VERSION)
+
+def messageblock(lst):
+	res=''
+	sep = '<br /><hr /><br />'
+
+	res += sep
+	for item in lst:
+		res += "<code>%s = %s</code><br />" % (item[0], str(item[1]))
+	res += sep
+
+	return res
+
+def generate_page_login(form, SR, extra_headers, msg, logged_in=False):
 	base=''
 
 	with open(KDLP_URLBASE + 'header', "r") as f:
 		base += f.read()
 
-	with open(KDLP_URLBASE + 'nav', "r") as f:
+	nav = 'nav'
+	if logged_in:
+		nav = 'nav_us'
+	
+	with open(KDLP_URLBASE + nav, "r") as f:
 		base += f.read()
 
-	def dump_line():
-		return '<br /><hr /><br >'
-
-	def dump_as_str(name, var):
-		return "<code>%s = %s</code><br />" % (name, str(var))
-
 	base += form 
-	extra = [dump_line(), dump_as_str("message", msg),
-		dump_as_str("version", APPLICATION + " " + VERSION), dump_line()]
+
+	extra = messageblock([('message', msg), ('appver', appver())])
 
 	return ok_html(base, SR, extra_docs=extra, extra_headers=extra_headers)
 
@@ -490,7 +531,7 @@ def handle_login(queries, SR, env):
 			'logout_button' : FORM_LOGOUT_INTERNAL
 		}
 
-	return generate_page_login(main_form, SR, extra_headers, msg)
+	return generate_page_login(main_form, SR, extra_headers, msg, logged_in=US is not None)
 
 def application(env, SR):
 
