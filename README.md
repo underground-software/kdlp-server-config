@@ -21,7 +21,7 @@ SSL/
 ### Servers
 
 |name|type|implementation|purpose|handles|internal|
-|--|--|--|--|
+|--|--|--|--|--|--|
 |sol|nginx|config here|SSL and reverse proxy|all external HTTP{,S}||
 |venus|wsgi|[auth.py](https://github.com/underground-software/auth.py)|auth server|^/login$|/check (auth_request) and /logout|
 |earth|wsgi|[md.py](https://github.com/underground-software/md.py)|serve core .md website|^/$ and ^.\*.md$||
